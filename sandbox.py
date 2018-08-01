@@ -2,7 +2,7 @@
 1) What are the most common medications for each disease in the base file?
 2) What medications are most indicative of each disease?
 3) Choose ONE of the diseases and build a model to infer whether that disease is present from the medications.
-4) Demonstrate that the end user should be confident in teh result.
+4) Demonstrate that the end user should be confident in the result.
 5) Can you find any evidence that for the disease you've modeled, a certain drug is preferred by a certain demographic subgroup?
 """
 
@@ -31,8 +31,6 @@ ndc = ndc.sort_values(['rxNDC','id'], ascending=[True, False])
 ndc = ndc.drop_duplicates()
 ndc = dict(ndc[['rxNDC','rxName']].values.tolist())
 
-ndc = ndc.drop_duplicates()
-ndc1 = ndc.drop_duplicates('rxNDC')
 # get disease in long format
 diseases = base.columns[8:].values.tolist()
 dis_long = base.melt('id',diseases)
@@ -41,100 +39,85 @@ dis_long = dis_long.loc[dis_long['value'].isin(['Yes','No'])]
 dis_long = dis_long.replace(['Yes','No'],[1,0])
 
 
-# indicator variable for each medication by id
-# maybe do this for each med separately, to avoid the super-wide data?
-subs = meds[['id', 'rxNDC']]
-subs = subs.drop_duplicates()
-subs['ones'] = 1
-subs = subs.pivot('id','rxNDC')
-meds_wide = subs.fillna(0)
-
-
 medsdd = meds[['id', 'rxNDC']]
 medsdd = medsdd.drop_duplicates()
 dismeds = pd.merge(dis_long, medsdd,'inner','id')
 dismeds.groupby(['variable','rxNDC'], as_index=False).count()
-
-
 yes = dismeds.loc[dismeds['value']==1][['id','variable','rxNDC']]
 sums = yes.groupby(['variable','rxNDC'], as_index=False).count()
 sums = sums.sort_values(['variable','id'], ascending=[True, False])
+# indicator variable for each medication by id
+# maybe do this for each med separately, to avoid the super-wide data?
 
 #1)
+
 results1 = {}
+ten = {}
+fifty = {}
 for disease in diseases:
-	vals = sums.loc[sums['variable']==disease][:5].values
+	vals = sums.loc[sums['variable']==disease]
+	ten[disease] = [val[1] for val in vals.values if val[2]>=10]
+	fifty[disease] = [val[1] for val in vals.values if val[2]<=50]
+	vals = vals[:10].values
 	results1[disease] = [(val[1], ndc[val[1]]) for val in vals]
 
+
 #2)
-
-
 import scipy.stats as stats
-dis = dis_long.loc[dis_long['variable']=='anginaDiagnosed']
-medyn = meds[['id','rxNDC']].loc[meds['rxNDC']==63653117101]
-medyn = medyn.drop_duplicates()
-medyn['value2'] = 1
-dm = pd.merge(dis_long,medyn,'left','id')
-dm = dm.fillna(0)[['value','value2','id']]
-dm = dm.groupby(['value','value2'], as_index=False).count().values.tolist()
-table = [[dm[0][2], dm[1][2]],[dm[2][2], dm[3][2]]]
-oddsratio, pvalue = stats.fisher_exact(table)
-
 results2 = {}
 for disease in diseases:
 	result = []
 	dis = dis_long.loc[dis_long['variable']==disease]
-
 	for med in ndc.keys():
-		medyn = meds[['id','rxNDC']].loc[meds['rxNDC']==med]
-		medyn = medyn.drop_duplicates()
-		medyn['value2'] = 1
-		
-		dm = pd.merge(dis_long,medyn,'left','id')
-		dm = dm.fillna(0)[['value','value2','id']]
-		dm = dm.groupby(['value','value2'], as_index=False).count().values.tolist()
-		if (len(dm)==4):
-			table = [[dm[0][2], dm[1][2]],[dm[2][2], dm[3][2]]]
-			oddsratio, pvalue = stats.fisher_exact(table)
-			if pvalue < 0.01:
-				result.push((oddsratio, med, ndc[med]))
+		if (med in ten[disease]):
+			medyn = meds[['id','rxNDC']].loc[meds['rxNDC']==med]
+			medyn = medyn.drop_duplicates()
+			medyn['value2'] = 1
+			dm = pd.merge(dis_long,medyn,'left','id')
+			dm = dm.fillna(0)[['value','value2','id']]
+			dm = dm.groupby(['value','value2'], as_index=False).count().values.tolist()
+			if (len(dm)==4):
+				table = [[dm[0][2], dm[1][2]],[dm[2][2], dm[3][2]]]
+				oddsratio, pvalue = stats.fisher_exact(table)
+				if pvalue < 0.01:
+					print disease
+					print ndc[med]
+					print oddsratio
+					result.append((oddsratio, med, ndc[med]))
 
 	result = sorted(result)[::-1][:5]
-	results[disease] = result
+	results2[disease] = result
 
+#3)
+diabetes = dis_long.loc[dis_long['variable']=='diabetesDiagnosed'][['id','value']]
+dmeds = meds[['id','rxNDC']].loc[meds['rxNDC'].isin(ten['diabetesDiagnosed'])]
+dmeds = dmeds.drop_duplicates()
+dmeds['ones'] = 1
+dmeds = dmeds.pivot('id','rxNDC')
+dmeds = dmeds.fillna(0)
+dmeds['id'] = dmeds.index
 
+medids = set([id for id in dmeds['id'].values.tolist()])
+diabids = set([id for id in diabetes['id'].values.tolist()])
+shared = set([id for id in disids if id in medids])
 
+data = dmeds.loc[dmeds['id'].isin(shared)]
+data = data.sort_values('id').drop('id', axis=1)
+data = data.values
 
+target = diabetes.loc[diabetes['id'].isin(shared)]
+target = target.sort_values('id')
+target = target['value'].values
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 
+x_train, x_test, y_train, y_test = train_test_split(data, target, test_size=0.25, random_state=0)
+model = LogisticRegression()
+model.fit(x_train, y_train)
+score = model.score(x_test, y_test)
 
-import sklearn
-
-#https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.fisher_exact.html
-#need to make a 2x2 table
-import scipy.stats as stats
-oddsratio, pvalue = stats.fisher_exact([[29467, 12933], [58, 804]])
-
-
-# from sklearn import datasets
-# from sklearn import metrics
-# from sklearn.tree import DecisionTreeClassifier
-# # load the iris datasets
-# dataset = datasets.load_iris()
-# # fit a CART model to the data
-# model = DecisionTreeClassifier()
-# model.fit(dataset.data, dataset.target)
-# print(model)
-# # make predictions
-# expected = dataset.target
-# predicted = model.predict(dataset.data)
-# # summarize the fit of the model
-# print(metrics.classification_report(expected, predicted))
-# print(metrics.confusion_matrix(expected, predicted))
-
-
-#sklearn.ensemble.RandomForestClassifier
-#sklearn.linear_model.LogisticRegression
-#sklearn.model_selection
-
-#http://scikit-learn.org/stable/modules/cross_validation.html
+from sklearn.ensemble import RandomForestClassifier
+rf = RandomForestClassifier()
+rf.fit(x_train, y_train)
+score = rf.score(x_test, y_test)
