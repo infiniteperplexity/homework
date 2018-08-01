@@ -69,7 +69,7 @@ for disease in diseases:
 	result = []
 	dis = dis_long.loc[dis_long['variable']==disease]
 	for med in ndc.keys():
-		if (med in ten[disease]):
+		if (med in fifty[disease]):
 			medyn = meds[['id','rxNDC']].loc[meds['rxNDC']==med]
 			medyn = medyn.drop_duplicates()
 			medyn['value2'] = 1
@@ -113,11 +113,21 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 x_train, x_test, y_train, y_test = train_test_split(data, target, test_size=0.25, random_state=0)
-model = LogisticRegression()
-model.fit(x_train, y_train)
-score = model.score(x_test, y_test)
+lrmodel = LogisticRegression()
+lrmodel.fit(x_train, y_train)
 
 from sklearn.ensemble import RandomForestClassifier
-rf = RandomForestClassifier()
-rf.fit(x_train, y_train)
-score = rf.score(x_test, y_test)
+rfmodel = RandomForestClassifier()
+rfmodel.fit(x_train, y_train)
+
+#4)
+score = lrmodel.score(x_test, y_test)
+score = rfmodel.score(x_test, y_test)
+
+#5)
+# this one's a bit more open-ended...you could do chisquare.
+races = base.race.unique().tolist()
+base['marital'] = base.married.apply(lambda x: x.replace(' IN ROUND',''))
+marital = base.marital.unique().tolist()
+sex = base.sex.unique().tolist()
+base['agecat'] = pd.cut(base['age'], [0,18,30,40,50,60,70,120])
