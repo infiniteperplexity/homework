@@ -13,6 +13,7 @@
 # go with Python 2.7 for now
 import numpy as np, pandas as pd
 path = 'C:/Users/M543015/Desktop/GitHub/homework/'
+path = 'C:/Users/Glenn Wright/Contacts/Documents/GitHub/homework/'
 base = pd.read_csv(path+'meps_base_data.csv', sep=',')
 meds = pd.read_csv(path+'meps_meds.csv', sep=',')
 
@@ -125,9 +126,33 @@ score = lrmodel.score(x_test, y_test)
 score = rfmodel.score(x_test, y_test)
 
 #5)
-# this one's a bit more open-ended...you could do chisquare.
-races = base.race.unique().tolist()
-base['marital'] = base.married.apply(lambda x: x.replace(' IN ROUND',''))
-marital = base.marital.unique().tolist()
-sex = base.sex.unique().tolist()
-base['agecat'] = pd.cut(base['age'], [0,18,30,40,50,60,70,120])
+demog = base.loc[base['diabetesDiagnosed']=='Yes']
+demogs = {}
+demog['marital'] = demog.married.apply(lambda x: x.replace(' IN ROUND',''))
+demogs['races'] = demog.race.unique().tolist()
+demogs['maritals'] = demog.marital.unique().tolist()
+demogs['sexes'] = demog.sex.unique().tolist()
+demog['agecat'] = pd.cut(demog['age'], [0,18,30,40,50,60,70,120])
+demog['ages'] = demog.agecat.unique().tolist()
+dprefer = {}
+for demo in demogs:
+	for cat in demo:
+		dm = demog[['id',demo]]
+		dm[cat] = np.where(dm[demo]==cat, 1, 0)
+		dm = dm.drop_duplicates()[['id',cat]]
+		dprefer[cat] = []
+		#may want to do a smaller subset...
+		for med in dmeds:
+			md = dmeds.loc[dmeds['rxNDC']==med]
+			md['value'] = 1
+			mg = pd.merge(dm, md, 'left', 'id')
+			mg = mg.fillna(0)
+			mg = mg[['id', cat, 'value']]
+			tb = mg.groupby([cat,'value'], as_index=False).count().values.tolist()
+			table = [[tb[0][2], tb[1][2]],[tb[2][2], tb[3][2]]]
+			oddsratio, pvalue = stats.fisher_exact(table)
+			if pvalue < 0.01:
+				print cat
+				print ndc[med]
+				print oddsratio
+				dprefer[cat].append((oddsratio, med, ndc[med]))
