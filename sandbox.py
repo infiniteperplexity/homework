@@ -49,7 +49,6 @@ sums = sums.sort_values(['variable','id'], ascending=[True, False])
 # maybe do this for each med separately, to avoid the super-wide data?
 
 #1)
-
 results1 = {}
 ten = {}
 fifty = {}
@@ -155,6 +154,16 @@ plt.ylabel('True Positive Rate')
 plt.xlabel('False Positive Rate')
 plt.show()
 
+
+ptable = []
+for i in np.arange(0.0, 1.05, 0.05):
+	predicts = np.where(lrprobs>=i, 1, 0)
+	confuse = confusion_matrix(predicts, y_test)
+	tn, fn, fp, tp = confuse.ravel()
+	sens = float(tp) / (tp+fn)
+	prec = float(tp) / (tp+fp)
+	row = (i, sens, prec)
+	ptable.append(row) 
 
 #5)
 demog = base.loc[base['diabetesDiagnosed']=='Yes']
