@@ -21,7 +21,7 @@ base.dtypes
 base.head()
 base.describe()
 
-base.dtypes
+meds.dtypes
 meds.head()
 meds.describe()
 
@@ -31,15 +31,13 @@ ndc = ndc.groupby(['rxNDC','rxName'], as_index=False).count()
 ndc = ndc.sort_values(['rxNDC','id'], ascending=[True, False])
 ndc = ndc.drop_duplicates()
 ndc = dict(ndc[['rxNDC','rxName']].values.tolist())
-
-# get disease in long format
 diseases = base.columns[8:].values.tolist()
+# get disease in long format
+
 dis_long = base.melt('id',diseases)
 dis_long = dis_long.drop_duplicates()
 dis_long = dis_long.loc[dis_long['value'].isin(['Yes','No'])]
 dis_long = dis_long.replace(['Yes','No'],[1,0])
-
-
 medsdd = meds[['id', 'rxNDC']]
 medsdd = medsdd.drop_duplicates()
 dismeds = pd.merge(dis_long, medsdd,'inner','id')
