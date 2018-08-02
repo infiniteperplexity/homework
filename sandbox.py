@@ -13,7 +13,7 @@
 # go with Python 2.7 for now
 import numpy as np, pandas as pd
 path = 'C:/Users/M543015/Desktop/GitHub/homework/'
-path = 'C:/Users/Glenn Wright/Contacts/Documents/GitHub/homework/'
+# path = 'C:/Users/Glenn Wright/Contacts/Documents/GitHub/homework/'
 base = pd.read_csv(path+'meps_base_data.csv', sep=',')
 meds = pd.read_csv(path+'meps_meds.csv', sep=',')
 
@@ -100,7 +100,7 @@ dmeds['id'] = dmeds.index
 
 medids = set([id for id in dmeds['id'].values.tolist()])
 diabids = set([id for id in diabetes['id'].values.tolist()])
-shared = set([id for id in disids if id in medids])
+shared = set([id for id in diabids if id in medids])
 
 data = dmeds.loc[dmeds['id'].isin(shared)]
 data = data.sort_values('id').drop('id', axis=1)
@@ -116,43 +116,80 @@ from sklearn.model_selection import train_test_split
 x_train, x_test, y_train, y_test = train_test_split(data, target, test_size=0.25, random_state=0)
 lrmodel = LogisticRegression()
 lrmodel.fit(x_train, y_train)
+lrpredict = lrmodel.predict(x_test)
 
 from sklearn.ensemble import RandomForestClassifier
 rfmodel = RandomForestClassifier()
 rfmodel.fit(x_train, y_train)
+rfpredict = rfmodel.predict(x_test)
+
 
 #4)
-score = lrmodel.score(x_test, y_test)
-score = rfmodel.score(x_test, y_test)
+lrscores = lrmodel.score(x_test, y_test)
+rfscores = rfmodel.score(x_test, y_test)
+
+from sklearn.metrics import roc_curve, auc, confusion_matrix
+
+lrconfuse = confusion_matrix(lrpredict, y_test)
+rfconfuse = confusion_matrix(rfpredict, y_test)
+
+tn, fn, fp, tp = lrconfuse.ravel()
+lrsens = float(tp) / (tp+fn)
+lrprec = float(tp) / (tp+fp)
+
+tn, fn, fp, tp = rfconfuse.ravel()
+rfsens = float(tp) / (tp+fn)
+rfprec = float(tp) / (tp+fp)
+
+lrprobs = lrmodel.predict_proba(x_test)[:,1:]
+rfprobs = rfmodel.predict_proba(x_test)[:,1:]
+import matplotlib.pyplot as plt
+fpr, tpr, _ = roc_curve(y_test, lrprobs)
+fpr, tpr, _ = roc_curve(y_test, rfprobs)
+roc_auc = auc(fpr, tpr)
+plt.title('Receiver Operating Characteristic')
+plt.plot(fpr, tpr, 'b', label='AUC = %0.2f'% roc_auc)
+plt.legend(loc='lower right')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()
+
 
 #5)
 demog = base.loc[base['diabetesDiagnosed']=='Yes']
 demogs = {}
 demog['marital'] = demog.married.apply(lambda x: x.replace(' IN ROUND',''))
-demogs['races'] = demog.race.unique().tolist()
-demogs['maritals'] = demog.marital.unique().tolist()
-demogs['sexes'] = demog.sex.unique().tolist()
+demogs['race'] = demog.race.unique().tolist()
+demogs['marital'] = demog.marital.unique().tolist()
+demogs['sex'] = demog.sex.unique().tolist()
 demog['agecat'] = pd.cut(demog['age'], [0,18,30,40,50,60,70,120])
-demog['ages'] = demog.agecat.unique().tolist()
+demogs['agecat'] = demog.agecat.unique().tolist()
+
 dprefer = {}
+top = [row[0] for row in results1['diabetesDiagnosed']]
 for demo in demogs:
-	for cat in demo:
+	for cat in demogs[demo]:
 		dm = demog[['id',demo]]
 		dm[cat] = np.where(dm[demo]==cat, 1, 0)
 		dm = dm.drop_duplicates()[['id',cat]]
 		dprefer[cat] = []
-		#may want to do a smaller subset...
-		for med in dmeds:
-			md = dmeds.loc[dmeds['rxNDC']==med]
+		for med in top:
+		# for med in fifty['diabetesDiagnosed']:
+			md = meds.loc[meds['rxNDC']==med]
 			md['value'] = 1
 			mg = pd.merge(dm, md, 'left', 'id')
 			mg = mg.fillna(0)
 			mg = mg[['id', cat, 'value']]
 			tb = mg.groupby([cat,'value'], as_index=False).count().values.tolist()
-			table = [[tb[0][2], tb[1][2]],[tb[2][2], tb[3][2]]]
-			oddsratio, pvalue = stats.fisher_exact(table)
-			if pvalue < 0.01:
-				print cat
-				print ndc[med]
-				print oddsratio
-				dprefer[cat].append((oddsratio, med, ndc[med]))
+			if (len(tb)==4):
+				table = [[tb[0][2], tb[1][2]],[tb[2][2], tb[3][2]]]
+				oddsratio, pvalue = stats.fisher_exact(table)
+				if pvalue < 0.01:
+					dprefer[cat].append((oddsratio, med, ndc[med]))
+
+		dprefer[cat] = sorted(dprefer[cat])
+
+#most notable results are for children
